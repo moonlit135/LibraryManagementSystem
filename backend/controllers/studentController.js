@@ -1,36 +1,176 @@
+const { Student } = require('../models');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { Student } = require('../models');
+const { Op } = require('sequelize');
 require('dotenv').config();
 
-// Register a new student
+// @desc    Register a new student
+// @route   POST /api/students/register
+// @access  Public
 exports.registerStudent = async (req, res) => {
   try {
-    const { name, department, course, roll_no, password, email } = req.body;
+    const { 
+      name, 
+      roll_no, 
+      department, 
+      course, 
+      email, 
+      password 
+    } = req.body;
 
-    // Check if roll_no or email already exists
-    const existingStudent = await Student.findOne({ where: { roll_no } });
-    const existingEmail = await Student.findOne({ where: { email } });
-
-    if (existingStudent || existingEmail) {
-      return res.status(400).json({ message: 'Roll number or Email already exists' });
+    // Validate required fields
+    if (!name || !roll_no || !department || !course || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'All fields are required'
+      });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const newStudent = await Student.create({
-      name,
-      department,
-      course,
-      roll_no,
-      password: hashedPassword,
-      email,
+    // Check if student with this email or roll number already exists
+    const existingStudent = await Student.findOne({
+      where: {
+        [Op.or]: [
+          { email },
+          { roll_no }
+        ]
+      }
     });
 
-    res.status(201).json({ message: 'Student registered successfully', student: newStudent });
+    if (existingStudent) {
+      const field = existingStudent.email === email ? 'Email' : 'Roll number';
+      return res.status(400).json({
+        success: false,
+        message: `${field} already exists`
+      });
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create student record
+    const student = await Student.create({
+      name,
+      roll_no,
+      department,
+      course,
+      email,
+      password: hashedPassword,
+      otp: null,
+      otpExpiry: null
+    });
+
+    // Remove sensitive data before sending response
+    const studentData = student.get({ plain: true });
+    delete studentData.password;
+    delete studentData.otp;
+    delete studentData.otpExpiry;
+
+    res.status(201).json({
+      success: true,
+      message: 'Student registered successfully',
+      data: studentData
+    });
+
   } catch (error) {
-    console.error('Error registering student:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in registerStudent:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Complete student registration after OTP verification
+// @route   PUT /api/students/complete-registration
+// @access  Private
+exports.completeRegistration = async (req, res) => {
+  try {
+    const { email, ...studentData } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    // Find the temporary student record
+    const student = await Student.findOne({ where: { email } });
+    
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found or registration session expired'
+      });
+    }
+
+    // Hash password if provided
+    if (studentData.password) {
+      const salt = await bcrypt.genSalt(10);
+      studentData.password = await bcrypt.hash(studentData.password, salt);
+    }
+
+    // Update student record with final registration data
+    await student.update({
+      ...studentData,
+      otp: null,          // Clear OTP after successful registration
+      otpExpiry: null     // Clear OTP expiry
+    });
+
+    // Remove sensitive data before sending response
+    const updatedStudent = student.get({ plain: true });
+    delete updatedStudent.password;
+    delete updatedStudent.otp;
+    delete updatedStudent.otpExpiry;
+
+    res.status(200).json({
+      success: true,
+      message: 'Registration completed successfully',
+      data: updatedStudent
+    });
+
+  } catch (error) {
+    console.error('Error in completeRegistration:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get student profile
+// @route   GET /api/students/profile/:id
+// @access  Private
+exports.getStudentProfile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const student = await Student.findByPk(id, {
+      attributes: { exclude: ['password', 'otp', 'otpExpiry'] }
+    });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: student
+    });
+
+  } catch (error) {
+    console.error('Error in getStudentProfile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 

@@ -35,7 +35,20 @@ module.exports = (sequelize, DataTypes) => {
   email: {
     type: DataTypes.STRING(255),
     allowNull: false,
-    unique: true
+    unique: true,
+    validate: {
+      isEmail: true
+    }
+  },
+
+  otp: {
+    type: DataTypes.STRING(6),
+    allowNull: true
+  },
+
+  otpExpiry: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   tableName: 'Students',
@@ -44,4 +57,3 @@ module.exports = (sequelize, DataTypes) => {
 
   return Student;
 };
-

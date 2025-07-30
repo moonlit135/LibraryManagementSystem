@@ -20,4 +20,21 @@ router.put('/:id', authenticateToken, adminOnly, studentController.updateStudent
 // Delete student (Admin only)
 router.delete('/:id', authenticateToken, adminOnly, studentController.deleteStudent);
 
+// Student registration and profile management routes
+
+// @route   POST /api/students/register
+// @desc    Register a new student (initial step before OTP verification)
+// @access  Public
+router.post('/register', studentController.registerStudent);
+
+// @route   PUT /api/students/complete-registration
+// @desc    Complete student registration after OTP verification
+// @access  Private (protected by OTP verification)
+router.put('/complete-registration', studentController.completeRegistration);
+
+// @route   GET /api/students/profile/:id
+// @desc    Get student profile
+// @access  Private (protected by JWT)
+router.get('/profile/:id', authenticateToken, studentController.getStudentProfile);
+
 module.exports = router;
